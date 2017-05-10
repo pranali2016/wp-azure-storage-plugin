@@ -23,10 +23,20 @@
 		<hr>
 		<p class="container-actions actions manual">
 			<button id="container-manual-save" type="submit" class="container-action-save button button-primary" data-working="<?php _e( 'Saving...', 'azure-storage-and-cdn' ); ?>"><?php _e( 'Save Container', 'azure-storage-and-cdn' ); ?></button>
-			<span><a href="#" id="bucket-action-browse" class="bucket-action-browse"><?php _e( 'Browse existing containers', 'azure-storage-and-cdn' ); ?></a></span>&nbsp;&nbsp;
+			<span><a href="#" id="bucket-action-browse" class="container-browse"><?php _e( 'Browse existing containers', 'azure-storage-and-cdn' ); ?></a></span>&nbsp;&nbsp;
 			<span><a href="#" id="container-action-create" class="container-create"><?php _e( 'Create new container', 'azure-storage-and-cdn' ); ?></a></span>
 		</p>			
 	</form>
+	</div>
+	
+	<div class="container-select" style="display:none">
+		<h3><?php _e( 'Select container', 'azure-storage-and-cdn' ); ?></h3>
+		<ul class="container-list" data-working="<?php _e( 'Loading...', 'azure-storage-and-cdn' ); ?>"></ul>
+		<hr>
+		<p class="container-actions ">
+			<span> <a class="container-action-cancel"> Cancel </a> </span>
+			<span class="right"><a href="#" class="container-refresh"><?php _e( 'Refresh', 'azure-storage-and-cdn' ); ?></a></span>
+		</p>		
 	</div>
 	
 	<div class="container-action-create" style="display:none" >

@@ -23,7 +23,8 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 		add_action( 'azure_plugin_load', $this );		
 		
 		add_action( 'wp_ajax_manual-save-container', array( $this, 'ajax_save_container' ) );
-		add_action( 'wp_ajax_azure-container-create', array( $this, 'ajax_create_container' ) );		
+		add_action( 'wp_ajax_azure-container-create', array( $this, 'ajax_create_container' ) );
+		add_action( 'wp_ajax_get-container-list', array($this, 'ajax_get_containers') );
 	}
 	
 	function admin_menu( $azure ) {
@@ -50,7 +51,7 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 				'strings'         => array(
 					'create_container_error'      => __( 'Error creating container', 'azure-storage-and-cdn' ),
 					'save_container_error'        => __( 'Error saving bucket', 'azure-storage-and-cdn' ),
-					'get_buckets_error'           => __( 'Error fetching buckets', 'azure-storage-and-cdn' ),
+					'get_container_error'           => __( 'Error fetching containers', 'azure-storage-and-cdn' ),
 					'get_url_preview_error'       => __( 'Error getting URL preview: ', 'azure-storage-and-cdn' ),
 					'save_alert'                  => __( 'The changes you made will be lost if you navigate away from this page', 'azure-storage-and-cdn' ),					
 				),				
@@ -124,23 +125,18 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 	
 	// get list of containers from azure storage
 	function check_container_permission( $container) {
-		try {
-			$containers = $this->blobClient->listContainers()->getContainers();			
-			$matched = '';
-			foreach($containers as $c){
-				if($c->getName() == $container){
-					$matched = true;
-				}				
-			}
-			if(!$matched){
+		$container_list = $this->get_container_list();
+		if(is_wp_error($container_list)){
+			return $container_list;
+		}
+		else{
+			if(in_array($container,$container_list)){
+				return true;
+			}else{
 				$error_msg = "No such Container exist";
 				return new WP_Error( 'exception', $error_msg );
 			}
-		} catch ( Exception $e ) {
-			// if we encounter an error that isn't access denied, throw that error
-				$error_msg = $e->getMessage();
-				return new WP_Error( 'exception', $error_msg );
-			}
+		}
 	}
 	
 	// save container to the database
@@ -225,5 +221,35 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 	// get container name from the database
 	function get_container_name(){
 		return $this->get_setting('container');
+	}
+
+	// get container list
+	function get_container_list(){
+		$containers = array();
+		try{
+			$container_list = $this->blobClient->listContainers()->getContainers();
+			foreach($container_list as $cl){
+				$containers[] = $cl->getName();
+			}
+		}catch (Exception $e){
+			$error_msg = $e->getMessage();
+			return new WP_Error( 'exception', $error_msg );
+		}
+		return $containers;
+	}
+	
+	//ajax-get-containers
+	function ajax_get_containers(){
+		$this->verify_ajax_request();
+		$containers = $this->get_container_list();
+		if( is_wp_error($containers)){
+			$out = $this->prepare_container_error( $containers, false );
+		} else {
+			$out = array(
+				'success' => '1',
+				'containers' => $containers,
+			);
+		}
+		$this->end_ajax( $out );
 	}
 }

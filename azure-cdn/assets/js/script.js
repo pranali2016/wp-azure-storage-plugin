@@ -13,9 +13,18 @@
 			$('.container-action-create').css("display","block");
 		});
 		
+		$( 'body' ).on( 'click', '.container-browse', function( e ) {
+			e.preventDefault();
+			$('.container-manual').hide();
+			$('.container-error').hide();
+			$('.container-select').css("display","block");
+			loadContainerList();
+		});
+		
 		$('.container-action-cancel').click(function(){
 			$('.container-manual').show();
-			$('.container-error').hide();			
+			$('.container-error').hide();
+			$('.container-select').hide();
 			$('.container-action-create').css("display","none");
 		});
 		
@@ -27,6 +36,11 @@
 		$( 'body' ).on( 'click', '.azure-container-create', function( e ) {
 			e.preventDefault();
 			create();
+		} );
+		
+		$( 'body' ).on( 'click', '.container-refresh', function( e ) {
+			e.preventDefault();
+			loadContainerList( );
 		} );
 				
 
@@ -110,6 +124,40 @@
 				}
 			}
 		} );
+	}
+	
+	//loadContainerList
+	function loadContainerList(){
+		var $container_list = $('.container-list');
+		$container_list.html("<li class='loading'>"+ $container_list.attr('data-working')+"</li>");
+		
+		var data = {
+			action:'get-container-list',
+		};
+		
+		$.ajax({
+			url: ajaxurl,
+			type: 'GET',
+			dataType: 'JSON',
+			data: data,
+			error: function(jqXHR, textStatus, errorThrown){
+				$container_list.html('');
+				showError(azure.strings.get_container_error,data['error'],'container-save');
+			},
+			success: function(data, textStatus,jqXHR){
+				$container_list.html( '' );
+					if ( 'undefined' !== typeof data[ 'success' ] ) {
+						$( data[ 'containers' ] ).each( function( idx, containers ) {
+							var containersClass = containers;
+							$container_list.append( '<li><a class="' + containersClass + '" href="#" data-bucket="' + containers + '"><span class="container"><span class="dashicons dashicons-portfolio"></span> ' + containers + '</span><span class="spinner"></span></span></a></li>' );
+						} );
+
+					} else {
+						showError( azure.strings.get_container_error, data[ 'error' ], 'container-save' );
+					}
+			}
+			
+		});
 	}
 	
 	function showError( title, error, context ) {

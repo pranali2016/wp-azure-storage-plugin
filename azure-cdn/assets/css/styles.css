@@ -21,3 +21,14 @@
 .container-error{
 	margin: 15px 2px !important;
 }
+.wrap-container .container-select .container-list {
+    padding: 15px;
+    max-height: 200px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background-color: #fff;
+    font-size: 14px;
+}
+.right {
+	float: right;
+}
