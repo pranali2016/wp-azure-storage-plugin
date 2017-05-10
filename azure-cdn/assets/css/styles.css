@@ -1,0 +1,23 @@
+.container-action-save ,.azure-container-create{
+	float: right;
+}
+.wrap-container{
+	width: 60%
+}
+.wrap-container input{
+	width: 100%;
+}
+.wrap-container h1, h2, h3, h4, h5, h6 {
+	font-weight:400;
+}
+.container-action-cancel {
+	cursor: pointer;
+    color: #a00;
+    text-decoration: none;
+}
+.container-error span.title {
+    font-weight: bold;
+}
+.container-error{
+	margin: 15px 2px !important;
+}
