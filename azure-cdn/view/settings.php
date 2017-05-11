@@ -14,7 +14,8 @@
 
 			<?php if ( ( $_POST['access_account_name'] != null ) && !isset($_POST['remove-keys']) ) {// input var okay ?>
 				<div class="azure-updated updated">
-					<p><strong>Settings saved.</strong></p>
+					<p><strong>Settings saved.</strong>
+					<span class="right close">x </span></p>
 				</div>
 			<?php } ?>
 

@@ -25,6 +25,7 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 		add_action( 'wp_ajax_manual-save-container', array( $this, 'ajax_save_container' ) );
 		add_action( 'wp_ajax_azure-container-create', array( $this, 'ajax_create_container' ) );
 		add_action( 'wp_ajax_get-container-list', array($this, 'ajax_get_containers') );
+		add_action( 'wp_ajax_container-exist', array($this, 'ajax_container_exist') );
 	}
 	
 	function admin_menu( $azure ) {
@@ -57,10 +58,34 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 				),				
 			)
 		);
+		
+		$this->handle_post_request();
+	}
+
+	function handle_post_request(){
+		if ( empty( $_POST['action'] ) || 'save' != sanitize_key( $_POST['action'] ) ) { // input var okay
+			return;
+		}
+	//echo "<pre>"; print_r($_POST);exit;
+		// Make sure $this->settings has been loaded
+		$this->get_settings();
+
+		$post_vars = array( 'copy-to-azure','serve-from-azure' );
+		foreach ( $post_vars as $var ) {
+			$this->remove_setting( $var );
+			if ( ! isset( $_POST[ $var ] ) ) { // input var okay
+				continue;
+			}
+
+			$value = sanitize_text_field( $_POST[ $var ] ); // input var okay
+			$this->set_setting( $var, $value );
+		}
+		$this->save_settings();
 	}
 	
 	function render_page() {
 		$this->azure->render_view( 'header', array( 'page_title' => 'Azure Storage') );
+		$this->render_view( 'container-setting-tabs' );
 		$this->render_view( 'container-setting' );
 		$this->azure->render_view( 'footer' );
 	}
@@ -153,8 +178,11 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 			}
 
 			$this->save_settings();
-			$data = array("success"=>$container_name );
-			$this->end_ajax( $data );
+			$out = array(
+				'success' => '1',
+				'container' => $container_name,
+			);			
+			$this->end_ajax( $out );
 		}
 	}
 	
@@ -252,4 +280,24 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 		}
 		$this->end_ajax( $out );
 	}
+	
+	// container exist in database
+	function ajax_container_exist(){
+		$out = array();
+		$container = $this->get_setting('container');
+		if(isset($container)){
+			$out['success'] ='1';
+			$out['container'] = $container;
+		}
+		$this->end_ajax( $out );
+	}
+	
+	public function get_copy_to_azure_setting(){
+		return $this->get_setting('copy-to-azure');
+	}
+	
+	public function get_serve_from_azure_setting(){
+		return $this->get_setting('serve-from-azure');
+	}
+	
 }
