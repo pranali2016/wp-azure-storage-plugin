@@ -3,6 +3,7 @@ use WindowsAzure\Common\ServicesBuilder;
 use WindowsAzure\Blob\Models\CreateContainerOptions;
 use WindowsAzure\Blob\Models\PublicAccessType;
 use WindowsAzure\Common\ServiceException;
+use WindowsAzure\Blob\Models\CreateBlobOptions;
 
 class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 	
@@ -26,6 +27,13 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 		add_action( 'wp_ajax_azure-container-create', array( $this, 'ajax_create_container' ) );
 		add_action( 'wp_ajax_get-container-list', array($this, 'ajax_get_containers') );
 		add_action( 'wp_ajax_container-exist', array($this, 'ajax_container_exist') );
+		
+		// Rewriting URLs
+		add_filter( 'wp_get_attachment_url', array( $this, 'wp_get_attachment_url' ), 99, 2 );
+		
+		// upload media to the azure storage
+		add_filter( 'wp_update_attachment_metadata', array( $this, 'wp_update_attachment_metadata' ), 110, 2 );
+
 	}
 	
 	function admin_menu( $azure ) {
@@ -66,7 +74,6 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 		if ( empty( $_POST['action'] ) || 'save' != sanitize_key( $_POST['action'] ) ) { // input var okay
 			return;
 		}
-	//echo "<pre>"; print_r($_POST);exit;
 		// Make sure $this->settings has been loaded
 		$this->get_settings();
 
@@ -298,6 +305,211 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 	
 	public function get_serve_from_azure_setting(){
 		return $this->get_setting('serve-from-azure');
+	}
+	
+	//Handles the upload of the attachment to Azure storage when an attachment is updated
+	public function wp_update_attachment_metadata($data, $post_id){
+
+		$data = $this->upload_attachment_to_azure_storage( $post_id, $data );
+
+		return $data;
+	}
+	//Get mime type
+	protected function get_mime_type( $file_path ) {
+		$file_type = wp_check_filetype_and_ext( $file_path, basename( $file_path ) );
+
+		return $file_type['type'];
+	}
+	
+	// uploading error
+	protected function return_upload_error($error,$return = null){
+		if(is_null($return)){
+			return new WP_Error('exception',$error);
+		}
+		return $return;
+	}
+	
+	// to upload blob to azure storage
+	public function upload_attachment_to_azure_storage( $post_id, $data = null, $file_path = null ){
+		$return_metadata = null;
+		if(is_null($data)){
+			$data = wp_get_attachment_metadata($post_id,true);
+		}else{
+			$return_metadata = $data;
+		}
+		
+		if(is_wp_error($data)){
+			return $data;
+		}
+		
+		$file_path = get_attached_file( $post_id, true );
+		if(! file_exists($file_path)){
+			$error_msg = sprintf(__('File does not exist','azure-storage-and-cdn'),$file_path);
+			return $this->return_upload_error($error_msg, $return_metadata);
+		}
+		
+		$type = $this->get_mime_type($file_path);
+		$option = new CreateBlobOptions();
+		$option->setBlobContentType($type);
+		$blob_name = basename($file_path);
+		$container = $this->get_container_name();
+		
+		$azureStorageObject = array(
+			'container' => $container,
+			'key'    => $blob_name,
+		);
+		
+		$files_to_remove = array();
+		if( file_exists($file_path)){		
+			$content = file_get_contents($file_path);
+			try{		
+				$this->blobClient->createBlockBlob($container, $blob_name, $content,$option);
+				$files_to_remove[] = $blob_name;
+			}catch(Exception $e){
+				$error_msg = sprintf( __( 'Error uploading %s to Azure Storage: %s', 'azure-storage-and-cdn' ), $file_path, $e->getMessage() );
+				return $this->return_upload_error( $error_msg, $return_metadata );
+			}
+		}
+		delete_post_meta( $post_id, 'azurestorage_info' );
+		add_post_meta( $post_id, 'azurestorage_info', $azureStorageObject );
+		$file_paths        = $this->get_attachment_file_paths( $post_id, true, $data );
+		
+		$additional_images = array();		
+		
+		foreach($file_paths as $size => $path){
+			if(! in_array($path, $files_to_remove)){
+				$additional_images[] = $path;				
+			}
+		}
+		
+		foreach($additional_images as $blob_path){
+			$type = $this->get_mime_type($blob_path);
+			$opt = new CreateBlobOptions();
+			$opt->setBlobContentType($type);
+			$blob_name = basename($blob_path);
+			try{		
+				$this->blobClient->createBlockBlob($container, $blob_name, $content,$opt);
+				$files_to_remove[] = $blob_name;
+			}catch(Exception $e){
+				$error_msg = sprintf( __( 'Error uploading %s to Azure Storage: %s', 'azure-storage-and-cdn' ), $file_path, $e->getMessage() );
+				return $this->return_upload_error( $error_msg, $return_metadata );
+			}
+		}
+		
+		$azureStorageObject['sizes'] = $data['sizes'];
+		update_post_meta( $post_id, 'azurestorage_info', $azureStorageObject );
+		
+		if ( ! is_null( $return_metadata ) ) {
+			// If the attachment metadata is supplied, return it
+			return $data;
+		}
+
+		return $azureStorageObject;
+	}
+	
+	// upload images in different sizes
+	public function get_attachment_file_paths( $attachment_id, $exists_locally = true, $meta = false, $include_backups = true ) {
+		$file_path = get_attached_file( $attachment_id, true );
+		$paths     = array(
+			'original' => $file_path,
+		);
+
+		if ( ! $meta ) {
+			$meta = get_post_meta( $attachment_id, '_wp_attachment_metadata', true );
+		}
+
+		if ( is_wp_error( $meta ) ) {
+			return $paths;
+		}
+
+		$file_name = basename( $file_path );
+
+		// Thumb
+		if ( isset( $meta['thumb'] ) ) {
+			$paths['thumb'] = str_replace( $file_name, $meta['thumb'], $file_path );
+		}
+
+		// Sizes
+		if ( isset( $meta['sizes'] ) ) {
+			foreach ( $meta['sizes'] as $size => $file ) {
+				if ( isset( $file['file'] ) ) {
+					$paths[ $size ] = str_replace( $file_name, $file['file'], $file_path );
+				}
+			}
+		}
+
+		$backups = get_post_meta( $attachment_id, '_wp_attachment_backup_sizes', true );
+
+		// Backups
+		if ( $include_backups && is_array( $backups ) ) {
+			foreach ( $backups as $size => $file ) {
+				if ( isset( $file['file'] ) ) {
+					$paths[ $size ] = str_replace( $file_name, $file['file'], $file_path );
+				}
+			}
+		}
+
+		// Allow other processes to add files to be uploaded
+		$paths = apply_filters( 'as3cf_attachment_file_paths', $paths, $attachment_id, $meta );
+
+		// Remove duplicates
+		$paths = array_unique( $paths );
+
+		// Remove paths that don't exist
+		if ( $exists_locally ) {
+			foreach ( $paths as $key => $path ) {
+				if ( ! file_exists( $path ) ) {
+					unset( $paths[ $key ] );
+				}
+			}
+		}
+
+		return $paths;
+	}
+		
+	public function wp_get_attachment_url($url, $post_id){
+		$new_url = $this->get_attachment_url( $post_id );
+		
+		if(false === $new_url ){
+			return $url;
+		}
+		return $new_url;
+	}
+	
+	// azure storage info from db
+	public function get_attachment_azure_info($post_id){
+		return get_post_meta($post_id,'azurestorage_info', true);
+	}
+	
+	// whether to server from azure storage or local server
+	public function is_attachment_served_by_azure($post_id){
+		if(! $this->get_setting('serve-from-azure')){
+			return false;
+		}
+		if(! $azureStorageObject = $this->get_attachment_azure_info($post_id)){
+			return false;
+		}
+		
+		return $azureStorageObject;
+	}
+	
+	public function get_attachment_url($post_id){
+		if( ! $azureStorageObject = $this->is_attachment_served_by_azure($post_id)){
+			return false;
+		}
+		$url = $this->get_attachment_azure_storage_url($post_id,$azureStorageObject);
+		return $url;
+	}
+	
+	// to fetch blob from the azure storage
+	public function get_attachment_azure_storage_url($post_id,$azureStorageObject){
+		$container = $azureStorageObject['container'];
+		$blob_name = $azureStorageObject['key'];
+		$azure  = new Azure_Web_Services();
+		$endprotocol = $azure->get_access_end_prorocol();
+		$accountName = $azure->get_access_account_name();
+		$url = $endprotocol."://".$accountName."blob.core.windows.net/".$container."/".$blob_name;		
+		return $url;
 	}
 	
 }
