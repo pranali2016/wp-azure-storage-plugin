@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: WP Azure
+Plugin Name: WP Offload Azure
 Description: Automatically copies media uploads to Azure storage for storage and delivery.
 Author: Promact
 Version: 1

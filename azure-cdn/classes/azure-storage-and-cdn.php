@@ -15,8 +15,11 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 		parent::__construct( $plugin_file_path );
 		$this->azure = $azure;			
 		$connection_string = $this->cerate_connection_string($azure);
-		$this->blobClient = ServicesBuilder::getInstance()->createBlobService($connection_string);
-		$this->init( $plugin_file_path , $blobClient);
+		
+		if(($connection_string != null)){
+			$this->blobClient = ServicesBuilder::getInstance()->createBlobService($connection_string);
+			$this->init( $plugin_file_path , $blobClient);
+		}
 	}
 	
 	function init($plugin_file_path, $blobClient){
@@ -508,7 +511,7 @@ class Azure_Storage_And_Cdn extends Azure_Plugin_Base{
 		$azure  = new Azure_Web_Services();
 		$endprotocol = $azure->get_access_end_prorocol();
 		$accountName = $azure->get_access_account_name();
-		$url = $endprotocol."://".$accountName."blob.core.windows.net/".$container."/".$blob_name;		
+		$url = $endprotocol."://".$accountName.".blob.core.windows.net/".$container."/".$blob_name;		
 		return $url;
 	}
 	
